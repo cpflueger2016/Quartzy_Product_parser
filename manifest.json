@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Quartzy Capture Prototype",
+  "version": "0.1.0",
+  "description": "Capture reagent details from vendor product pages.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://*.thermofisher.com/*",
+    "https://*.neb.com/*",
+    "https://*.sigmaaldrich.com/*",
+    "https://*.milliporesigma.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Capture product"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.thermofisher.com/*",
+        "https://*.neb.com/*",
+        "https://*.sigmaaldrich.com/*",
+        "https://*.milliporesigma.com/*"
+      ],
+      "js": [
+        "parsers/base.js",
+        "parsers/thermo.js",
+        "parsers/neb.js",
+        "parsers/sigma.js",
+        "parsers/index.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

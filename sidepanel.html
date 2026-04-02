@@ -1,0 +1,77 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Quartzy Capture</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <h1>Quartzy Capture</h1>
+    <button id="refreshBtn">Refresh from page</button>
+
+    <div class="field">
+      <label>Vendor</label>
+      <input id="vendor" />
+    </div>
+
+    <div class="field">
+      <label>Item name</label>
+      <textarea id="itemName" rows="3"></textarea>
+    </div>
+
+	<div class="field">
+  		<label>Product option</label>
+  		<select id="productOption"></select>
+	</div>
+    <div class="field">
+      <label>Catalog number</label>
+      <input id="catalogNumber" />
+    </div>
+    
+    <div class="field">
+  		<label>Concentration</label>
+  		<input id="concentration" />
+	</div>
+
+    <div class="field">
+      <label>Pack size</label>
+      <input id="packSize" />
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>Unit price</label>
+        <input id="unitPrice" />
+      </div>
+      <div class="field">
+        <label>Currency</label>
+        <input id="currency" />
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Source URL</label>
+      <input id="sourceUrl" />
+    </div>
+
+    <div class="field">
+      <label>Parser</label>
+      <input id="parserUsed" />
+    </div>
+
+    <div class="field">
+      <label>Confidence</label>
+      <input id="confidence" />
+    </div>
+
+    <div class="field checkbox">
+      <label><input type="checkbox" id="quoteRequired" /> Quote required / no visible price</label>
+    </div>
+
+    <pre id="debug"></pre>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

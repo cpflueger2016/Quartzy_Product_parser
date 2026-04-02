@@ -1,0 +1,63 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.wrap {
+  padding: 16px;
+}
+
+h1 {
+  font-size: 18px;
+  margin-top: 0;
+}
+
+.field {
+  margin-bottom: 12px;
+}
+
+.row {
+  display: flex;
+  gap: 12px;
+}
+
+.row .field {
+  flex: 1;
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+input, textarea, button {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  font-size: 13px;
+}
+
+button {
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+
+.checkbox label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox input {
+  width: auto;
+}
+
+pre {
+  font-size: 11px;
+  background: #f5f5f5;
+  padding: 8px;
+  overflow: auto;
+}
