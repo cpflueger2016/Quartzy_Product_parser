@@ -8,7 +8,10 @@
 <body>
   <div class="wrap">
     <h1>Quartzy Capture</h1>
-    <button id="refreshBtn">Refresh from page</button>
+    <div class="actions">
+      <button id="refreshBtn">Refresh from page</button>
+      <button id="submitBtn">Submit to Quartzy</button>
+    </div>
 
     <div class="field">
       <label>Vendor</label>
@@ -67,6 +70,69 @@
 
     <div class="field checkbox">
       <label><input type="checkbox" id="quoteRequired" /> Quote required / no visible price</label>
+    </div>
+
+    <div class="quartzy-section">
+      <h2>Quartzy</h2>
+
+      <div class="field">
+        <label>Access token</label>
+        <input id="quartzyAccessToken" type="password" autocomplete="off" />
+      </div>
+
+      <div class="field checkbox">
+        <label><input type="checkbox" id="quartzyRememberToken" /> Remember access token on this machine</label>
+      </div>
+
+      <div class="field">
+        <label>Organization ID</label>
+        <input id="quartzyOrganizationId" autocomplete="off" />
+      </div>
+
+      <div class="actions compact">
+        <button id="loadQuartzyBtn">Load labs and types</button>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Lab ID</label>
+          <input id="quartzyLabId" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label>Request type ID</label>
+          <input id="quartzyTypeId" autocomplete="off" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Lab</label>
+          <select id="quartzyLab"></select>
+        </div>
+        <div class="field">
+          <label>Request type</label>
+          <select id="quartzyType"></select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Quantity</label>
+          <input id="quartzyQuantity" type="number" min="1" step="1" />
+        </div>
+        <div class="field">
+          <label>Required before</label>
+          <input id="quartzyRequiredBefore" type="date" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Notes</label>
+        <textarea id="quartzyNotes" rows="4"></textarea>
+      </div>
+
+      <div id="quartzyStatus" class="status"></div>
+      <div id="submissionReceipt" class="receipt hidden"></div>
     </div>
 
     <pre id="debug"></pre>
