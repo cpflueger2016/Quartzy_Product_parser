@@ -24,6 +24,44 @@
     return /^[A-Z]\d{3,6}[A-Z0-9\-]*$/i.test((text || "").trim());
   }
 
+  function normalizePackSize(raw) {
+    return U.normalizeWhitespace(String(raw || ""))
+      .replace(/\bUL\b/g, "uL")
+      .replace(/\bML\b/g, "mL")
+      .trim();
+  }
+
+  function extractSingleOptionFromLine(line) {
+    const normalized = U.normalizeWhitespace(line);
+    const catalogMatch = normalized.match(/^([A-Z]\d{3,6}[A-Z0-9\-]*)\b/i);
+    if (!catalogMatch) return null;
+
+    const prices = Array.from(normalized.matchAll(/\$[\d,]+(?:\.\d{1,2})?/g)).map(match => match[0]);
+    if (!prices.length) return null;
+
+    const remainder = normalized.slice(catalogMatch[0].length).trim();
+    const firstPriceIndex = remainder.indexOf(prices[0]);
+    if (firstPriceIndex === -1) return null;
+
+    const details = remainder.slice(0, firstPriceIndex).trim();
+    const detailMatch = details.match(/^(.*?)\s+(\d[\d,]*(?:\.\d+)?\s*(?:units|unit|reactions|reaction|rxns|tests|test|mL|µL|uL|L))$/i);
+
+    const concentration = detailMatch ? U.normalizeWhitespace(detailMatch[1]) : "";
+    const packSize = detailMatch ? normalizePackSize(detailMatch[2]) : "";
+
+    const listPrice = parseMoney(prices[0]);
+    const yourPrice = parseMoney(prices[1] || "");
+
+    return {
+      catalogNumber: catalogMatch[1],
+      concentration,
+      packSize,
+      listPrice: listPrice.amount,
+      yourPrice: yourPrice.amount,
+      currency: yourPrice.currency || listPrice.currency || "AUD"
+    };
+  }
+
   function extractOptionRowsFromBodyText(bodyText) {
     const options = [];
     const lines = bodyText
@@ -33,35 +71,9 @@
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-
-      // Example row from NEB page text:
-      // M0495S 5,000 units/ml  200 units  $150.10 Sign In Sign In
-      const m = line.match(
-        /^([A-Z]\d{3,6}[A-Z0-9\-]*)\s+([\d,]+(?:\.\d+)?\s*[A-Za-z\/µμ]+)\s+([\d,]+(?:\.\d+)?\s*(?:units|unit|reactions|rxns|mL|µL|uL|L))\s+(\$[\d,]+(?:\.\d{1,2})?)(?:\s+(.+?))?(?:\s+(.+?))?$/i
-      );
-
-      if (!m) continue;
-
-      const catalogNumber = m[1];
-      const concentration = m[2];
-      const packSize = m[3];
-      const listPriceRaw = m[4];
-      const yourPriceRaw = (m[6] || m[5] || "").trim();
-
-      const listPrice = parseMoney(listPriceRaw);
-      const yourPrice =
-        /sign in/i.test(yourPriceRaw) || !yourPriceRaw
-          ? { amount: "", currency: listPrice.currency }
-          : parseMoney(yourPriceRaw);
-
-      options.push({
-        catalogNumber,
-        concentration,
-        packSize,
-        listPrice: listPrice.amount,
-        yourPrice: yourPrice.amount,
-        currency: yourPrice.currency || listPrice.currency || "AUD"
-      });
+      const option = extractSingleOptionFromLine(line);
+      if (!option) continue;
+      options.push(option);
     }
 
     return dedupeOptions(options);
@@ -115,7 +127,7 @@
       const packFallback =
         bodyText.match(/\b\d[\d,]*(?:\.\d+)?\s*(?:units|unit|reactions|rxns|mL|µL|uL|L)\b/i);
 
-      fallbackPackSize = packFallback ? packFallback[0] : "";
+      fallbackPackSize = packFallback ? normalizePackSize(packFallback[0]) : "";
     }
 
     const defaultPrice = selected?.yourPrice || selected?.listPrice || "";

@@ -1,9 +1,18 @@
 (function () {
-  function capture() {
+  if (window.__quartzyCaptureInitialized) return;
+  window.__quartzyCaptureInitialized = true;
+
+  function buildPayload() {
     const payload = window.PageParsers.parseCurrentPage();
 
     payload.priceMissing = !payload.unitPrice;
     payload.quoteRequired = !payload.unitPrice;
+
+    return payload;
+  }
+
+  function capture() {
+    const payload = buildPayload();
 
     chrome.runtime.sendMessage({
       type: "CAPTURE_RESULT",
@@ -11,19 +20,33 @@
     });
   }
 
+  function scheduleFollowUpCaptures() {
+    const delays = [1200, 3000];
+    delays.forEach(delay => {
+      window.setTimeout(capture, delay);
+    });
+  }
+
   if (document.readyState === "complete" || document.readyState === "interactive") {
     capture();
+    scheduleFollowUpCaptures();
   } else {
-    window.addEventListener("DOMContentLoaded", capture);
+    window.addEventListener("DOMContentLoaded", () => {
+      capture();
+      scheduleFollowUpCaptures();
+    }, { once: true });
   }
+
+  window.addEventListener("load", capture, { once: true });
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message?.type === "RUN_CAPTURE") {
-      const payload = window.PageParsers.parseCurrentPage();
-      payload.priceMissing = !payload.unitPrice;
-      payload.quoteRequired = !payload.unitPrice;
+      sendResponse({ ok: true, payload: buildPayload() });
+      return true;
+    }
 
-      sendResponse({ ok: true, payload });
+    if (message?.type === "PING_CAPTURE") {
+      sendResponse({ ok: true });
       return true;
     }
   });

@@ -165,10 +165,10 @@
     }
 
     if (/\b(price|each|order|buy|quote)\b/i.test(normalized)) {
-      const plain = normalized.match(/(\d+(?:\.\d{1,2})?)/);
-      if (plain) {
+      const moneyLike = normalized.match(/(\d{1,3}(?:,\d{3})*(?:\.\d{2})|\d+\.\d{2})/);
+      if (moneyLike) {
         return {
-          unitPrice: plain[1],
+          unitPrice: moneyLike[1].replace(/,/g, ""),
           currency: preferredCurrency
         };
       }

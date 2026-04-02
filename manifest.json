@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Quartzy Capture Prototype",
-  "version": "0.1.0",
+  "version": "0.2.3",
   "description": "Capture reagent details from vendor product pages.",
   "permissions": [
     "storage",
     "tabs",
     "activeTab",
-    "sidePanel"
+    "sidePanel",
+    "scripting"
   ],
   "host_permissions": [
     "https://*.thermofisher.com/*",

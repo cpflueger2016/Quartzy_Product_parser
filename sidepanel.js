@@ -3,6 +3,12 @@ async function getActiveTab() {
   return tabs[0];
 }
 
+function setDebugMessage(message) {
+  const debugEl = document.getElementById("debug");
+  if (!debugEl) return;
+  debugEl.textContent = message || "";
+}
+
 function setValue(id, value) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -88,23 +94,34 @@ function render(payload) {
   setValue("confidence", payload.confidence);
   setValue("quoteRequired", payload.quoteRequired);
 
-  document.getElementById("debug").textContent = JSON.stringify(payload, null, 2);
+  setDebugMessage(JSON.stringify(payload, null, 2));
 }
 
 async function loadLatest() {
   const data = await chrome.storage.session.get("latestCapture");
-  render(data.latestCapture);
+  if (data.latestCapture) {
+    render(data.latestCapture);
+    return;
+  }
+
+  await refreshFromPage();
 }
 
 async function refreshFromPage() {
   const tab = await getActiveTab();
   if (!tab?.id) return;
 
-  const response = await chrome.tabs.sendMessage(tab.id, { type: "RUN_CAPTURE" });
+  const response = await chrome.runtime.sendMessage({
+    type: "RUN_CAPTURE_FOR_TAB",
+    tabId: tab.id
+  });
+
   if (response?.payload) {
-    await chrome.storage.session.set({ latestCapture: response.payload });
     render(response.payload);
+    return;
   }
+
+  setDebugMessage(response?.error || "Unable to capture product details from this page.");
 }
 
 document.getElementById("refreshBtn").addEventListener("click", refreshFromPage);
