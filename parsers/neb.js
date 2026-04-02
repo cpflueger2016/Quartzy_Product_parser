@@ -134,7 +134,7 @@
     const defaultCurrency = selected?.currency || "AUD";
 
     return {
-      vendor: "New England Biolabs",
+      vendor: "NEB Australia",
       itemName: U.normalizeWhitespace(title),
       catalogNumber: selected?.catalogNumber || fallbackCatalog,
       concentration: selected?.concentration || "",

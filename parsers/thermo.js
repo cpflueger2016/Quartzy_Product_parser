@@ -291,6 +291,55 @@
     return U.parsePrice(ranked[0].snippet, { preferredCurrency });
   }
 
+  function dedupeOptions(options) {
+    const seen = new Set();
+    return options.filter(option => {
+      const key = [
+        option.catalogNumber,
+        option.packSize,
+        option.listPrice,
+        option.currency
+      ].join("|");
+
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  function extractThermoOptions(bodyText, preferredCurrency, selectedCatalogNumber, selectedPrice) {
+    const lines = String(bodyText || "")
+      .split("\n")
+      .map(line => U.normalizeWhitespace(line))
+      .filter(Boolean);
+
+    const headerIndex = lines.findIndex(line => /catalog\s+number\s+quantity/i.test(line));
+    if (headerIndex === -1) return [];
+
+    const options = [];
+    for (let i = headerIndex + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (/^\d+\s+options$/i.test(line) || /^catalog number\b/i.test(line)) continue;
+      if (/^price\b/i.test(line) || /^special offer$/i.test(line) || /^add to cart$/i.test(line)) break;
+      if (/^(specifications|ordering|support|resources|contents & storage)$/i.test(line)) break;
+
+      const match = line.match(/^([A-Z0-9-]{5,})\s+(\d+(?:\.\d+)?\s*(?:mL|µL|uL|L|mg|g|kg|µg|ug|tests|test|reactions|reaction|units|unit))$/i);
+      if (!match) continue;
+
+      const catalogNumber = match[1].toUpperCase();
+      const packSize = normalizePackSize(match[2]);
+      options.push({
+        catalogNumber,
+        packSize,
+        listPrice: catalogNumber === selectedCatalogNumber ? selectedPrice.unitPrice : "",
+        yourPrice: "",
+        currency: selectedPrice.currency || preferredCurrency
+      });
+    }
+
+    return dedupeOptions(options);
+  }
+
   function parseThermo() {
     const title = U.firstNonEmpty([
       U.textOf("h1"),
@@ -334,6 +383,12 @@
       bodyText
     ]);
     const priceParsed = U.parsePrice(priceText, { preferredCurrency });
+    const options = extractThermoOptions(bodyText, preferredCurrency, catalogNumber, priceParsed);
+    const selectedOptionIndex = Math.max(
+      0,
+      options.findIndex(option => option.catalogNumber === catalogNumber)
+    );
+    const selectedOption = options[selectedOptionIndex] || null;
 
     const packSizeMatch = bodyText.match(
       /\b(\d+(?:\.\d+)?)\s?(?:µg|ug|mg|g|kg|mL|µL|uL|L|reactions|rxns|tests|units)\b/i
@@ -342,13 +397,16 @@
     return {
       vendor: "Thermo Fisher Scientific",
       itemName: U.normalizeWhitespace(title),
-      catalogNumber,
-      packSize: amount || (packSizeMatch ? normalizePackSize(packSizeMatch[0]) : ""),
-      unitPrice: priceParsed.unitPrice,
-      currency: priceParsed.currency,
+      catalogNumber: selectedOption?.catalogNumber || catalogNumber,
+      packSize: selectedOption?.packSize || amount || (packSizeMatch ? normalizePackSize(packSizeMatch[0]) : ""),
+      unitPrice: selectedOption?.listPrice || priceParsed.unitPrice,
+      currency: selectedOption?.currency || priceParsed.currency,
       sourceUrl: location.href,
       parserUsed: "thermo",
-      confidence: title && (amount || priceParsed.unitPrice) ? 0.9 : title ? 0.75 : 0.35
+      confidence: title && (amount || priceParsed.unitPrice || options.length) ? 0.9 : title ? 0.75 : 0.35,
+      options,
+      selectedOptionIndex,
+      priceSource: selectedOption?.listPrice || priceParsed.unitPrice ? "listPrice" : "none"
     };
   }
 
