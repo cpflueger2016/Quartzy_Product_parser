@@ -2,8 +2,21 @@
   if (window.__quartzyCaptureInitialized) return;
   window.__quartzyCaptureInitialized = true;
 
+  function applyCurrencyDefaults(payload) {
+    const defaultCurrency = payload.currency || "AUD";
+    payload.currency = defaultCurrency;
+
+    if (Array.isArray(payload.options)) {
+      payload.options = payload.options.map(option => ({
+        ...option,
+        currency: option?.currency || defaultCurrency
+      }));
+    }
+  }
+
   function buildPayload() {
     const payload = window.PageParsers.parseCurrentPage();
+    applyCurrencyDefaults(payload);
 
     payload.priceMissing = !payload.unitPrice;
     payload.quoteRequired = !payload.unitPrice;
