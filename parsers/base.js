@@ -139,7 +139,8 @@
       { symbol: "A$", currency: "AUD" },
       { symbol: "$", currency: preferredCurrency || "USD" },
       { symbol: "€", currency: "EUR" },
-      { symbol: "£", currency: "GBP" }
+      { symbol: "£", currency: "GBP" },
+      { symbol: "¥", currency: "JPY" }
     ];
 
     for (const entry of symbolEntries) {
@@ -150,12 +151,12 @@
       }
     }
 
-    const codeBefore = normalized.match(/\b(AUD|USD|EUR|GBP)\s*(\d+(?:\.\d{1,2})?)\b/i);
+    const codeBefore = normalized.match(/\b(AUD|USD|EUR|GBP|JPY)\s*(\d+(?:\.\d{1,2})?)\b/i);
     if (codeBefore) {
       return { unitPrice: codeBefore[2], currency: codeBefore[1].toUpperCase() };
     }
 
-    const codeAfter = normalized.match(/\b(\d+(?:\.\d{1,2})?)\s*(?:\(?\s*(AUD|USD|EUR|GBP)\s*\)?)\b/i);
+    const codeAfter = normalized.match(/\b(\d+(?:\.\d{1,2})?)\s*(?:\(?\s*(AUD|USD|EUR|GBP|JPY)\s*\)?)\b/i);
     if (codeAfter) {
       return { unitPrice: codeAfter[1], currency: codeAfter[2].toUpperCase() };
     }

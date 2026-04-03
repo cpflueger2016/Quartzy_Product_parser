@@ -3,25 +3,60 @@ const CONTENT_SCRIPT_FILES = [
   "parsers/thermo.js",
   "parsers/neb.js",
   "parsers/sigma.js",
+  "parsers/activemotif.js",
+  "parsers/abcam.js",
+  "parsers/generic.js",
   "parsers/index.js",
   "content.js"
 ];
 
 const QUARTZY_API_BASE = "https://api.quartzy.com";
 
-function isSupportedUrl(url) {
+function inferVendorFromUrl(url) {
+  try {
+    const { hostname } = new URL(url);
+    const normalized = hostname.replace(/^www\./i, "");
+    const parts = normalized.split(".");
+    const root = parts.length > 1 ? parts[parts.length - 2] : normalized;
+
+    return root
+      .replace(/[-_]+/g, " ")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/\b\w/g, char => char.toUpperCase());
+  } catch (_) {
+    return "";
+  }
+}
+
+function buildUrlFallbackPayload(url) {
+  return {
+    vendor: inferVendorFromUrl(url),
+    itemName: "",
+    catalogNumber: "",
+    concentration: "",
+    packSize: "",
+    unitPrice: "",
+    currency: "AUD",
+    sourceUrl: url || "",
+    parserUsed: "generic-url-fallback",
+    confidence: 0.2,
+    priceMissing: true,
+    quoteRequired: true,
+    priceSource: "none",
+    options: [],
+    selectedOptionIndex: 0
+  };
+}
+
+function isCapturableUrl(url) {
   if (!url) return false;
 
   try {
     const { hostname, protocol } = new URL(url);
     if (!/^https?:$/.test(protocol)) return false;
+    if (/^(chrome|edge|about|chrome-extension)$/i.test(protocol.replace(":", ""))) return false;
 
-    return [
-      "thermofisher.com",
-      "neb.com",
-      "sigmaaldrich.com",
-      "milliporesigma.com"
-    ].some(domain => hostname === domain || hostname.endsWith(`.${domain}`));
+    return !!hostname;
   } catch (_) {
     return false;
   }
@@ -36,8 +71,8 @@ async function ensureContentScriptAndCapture(tab) {
     throw new Error("No active tab available.");
   }
 
-  if (!isSupportedUrl(tab.url)) {
-    throw new Error("Current tab is not on a supported vendor product page.");
+  if (!isCapturableUrl(tab.url)) {
+    throw new Error("Current tab is not a normal web page that can be captured.");
   }
 
   try {
@@ -154,9 +189,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       sendResponse({ ok: true, payload: response?.payload || null });
     }).catch(error => {
-      sendResponse({
-        ok: false,
-        error: error?.message || "Failed to capture from page."
+      chrome.tabs.get(message.tabId).then(async (tab) => {
+        if (!isCapturableUrl(tab?.url || "")) {
+          sendResponse({
+            ok: false,
+            error: error?.message || "Failed to capture from page."
+          });
+          return;
+        }
+
+        const fallback = buildUrlFallbackPayload(tab.url);
+        await chrome.storage.session.set({ latestCapture: fallback });
+        sendResponse({
+          ok: true,
+          payload: fallback,
+          warning: error?.message || "Fell back to URL-only capture."
+        });
+      }).catch(() => {
+        sendResponse({
+          ok: false,
+          error: error?.message || "Failed to capture from page."
+        });
       });
     });
 

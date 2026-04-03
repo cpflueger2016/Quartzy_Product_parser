@@ -102,6 +102,18 @@ button {
   color: #067647;
 }
 
+.status.warning {
+  color: #9a6700;
+}
+
+#captureStatus {
+  border: 1px solid #f5d98c;
+  background: #fff7e6;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
 .status a {
   color: inherit;
 }

@@ -51,6 +51,15 @@ function setQuartzyStatus(message, kind = "", linkUrl = "") {
   }
 }
 
+function setCaptureStatus(message, kind = "") {
+  const statusEl = getField("captureStatus");
+  if (!statusEl) return;
+
+  statusEl.className = kind ? `status ${kind}` : "status";
+  statusEl.textContent = message || "";
+  statusEl.classList.toggle("hidden", !message);
+}
+
 function setReceipt(submission) {
   const receiptEl = getField("submissionReceipt");
   const submitBtn = getField("submitBtn");
@@ -115,6 +124,60 @@ function applySelectedOption(payload, index) {
   payload.priceSource = selected.yourPrice ? "yourPrice" : selected.listPrice ? "listPrice" : "none";
   payload.priceMissing = !payload.unitPrice;
   payload.quoteRequired = !payload.unitPrice;
+}
+
+function isSameOption(a, b) {
+  if (!a || !b) return false;
+
+  const aCatalog = String(a.catalogNumber || "").trim().toLowerCase();
+  const bCatalog = String(b.catalogNumber || "").trim().toLowerCase();
+  const aPack = String(a.packSize || "").trim().toLowerCase();
+  const bPack = String(b.packSize || "").trim().toLowerCase();
+
+  if (aCatalog && bCatalog && aCatalog === bCatalog && aPack && bPack && aPack === bPack) {
+    return true;
+  }
+
+  return !!aPack && !!bPack && aPack === bPack;
+}
+
+function preserveSelectionAcrossRefresh(previousPayload, nextPayload) {
+  if (!previousPayload || !nextPayload) return nextPayload;
+  const previousParser = String(previousPayload.parserUsed || "").toLowerCase();
+  const nextParser = String(nextPayload.parserUsed || "").toLowerCase();
+  if (previousParser !== "abcam" && nextParser !== "abcam") return nextPayload;
+  if (previousPayload.sourceUrl !== nextPayload.sourceUrl) return nextPayload;
+
+  const previousOptions = previousPayload.options || [];
+  const nextOptions = nextPayload.options || [];
+  if (!previousOptions.length || !nextOptions.length) return nextPayload;
+
+  const previousSelected = previousOptions[previousPayload.selectedOptionIndex ?? 0];
+  if (!previousSelected) return nextPayload;
+
+  const matchedIndex = nextOptions.findIndex(option => isSameOption(option, previousSelected));
+  if (matchedIndex === -1) return nextPayload;
+
+  const refreshedPrice = nextPayload.unitPrice || "";
+  const refreshedCurrency = nextPayload.currency || "";
+  const parserMatchedSameOption = isSameOption(nextOptions[nextPayload.selectedOptionIndex ?? 0], previousSelected);
+
+  if (refreshedPrice && !parserMatchedSameOption) {
+    nextPayload.options = nextOptions.map((option, idx) => ({
+      ...option,
+      listPrice: idx === matchedIndex ? refreshedPrice : "",
+      yourPrice: idx === matchedIndex ? (option.yourPrice || "") : "",
+      currency: idx === matchedIndex ? (refreshedCurrency || option.currency || "") : (option.currency || "")
+    }));
+  }
+
+  applySelectedOption(nextPayload, matchedIndex);
+  if (!parserMatchedSameOption) {
+    nextPayload.captureWarning =
+      "Abcam refresh preserved your selected dropdown size and applied the refreshed page price to it.";
+  }
+
+  return nextPayload;
 }
 
 function populateSelect(selectId, items, placeholder) {
@@ -251,6 +314,7 @@ function render(payload) {
   if (!payload) return;
 
   populateOptionDropdown(payload);
+  setCaptureStatus(payload.captureWarning || "", payload.captureWarning ? "warning" : "");
 
   setValue("vendor", payload.vendor);
   setValue("itemName", payload.itemName);
@@ -497,6 +561,8 @@ async function loadLatest() {
 async function refreshFromPage() {
   const tab = await getActiveTab();
   if (!tab?.id) return;
+  const existingData = await chrome.storage.session.get("latestCapture");
+  const previousPayload = existingData.latestCapture || null;
 
   const response = await chrome.runtime.sendMessage({
     type: "RUN_CAPTURE_FOR_TAB",
@@ -504,10 +570,13 @@ async function refreshFromPage() {
   });
 
   if (response?.payload) {
-    render(response.payload);
+    const payload = preserveSelectionAcrossRefresh(previousPayload, response.payload);
+    await chrome.storage.session.set({ latestCapture: payload });
+    render(payload);
     return;
   }
 
+  setCaptureStatus("", "");
   setDebugMessage(response?.error || "Unable to capture product details from this page.");
 }
 

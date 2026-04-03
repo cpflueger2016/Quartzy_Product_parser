@@ -5,8 +5,10 @@
     if (host.includes("thermofisher")) return "thermo";
     if (host.includes("neb.com")) return "neb";
     if (host.includes("sigmaaldrich") || host.includes("milliporesigma")) return "sigma";
+    if (host.includes("activemotif")) return "activemotif";
+    if (host.includes("abcam")) return "abcam";
 
-    return "unknown";
+    return "generic";
   }
 
   function parseCurrentPage() {
@@ -15,6 +17,9 @@
     if (vendor === "thermo") return window.ThermoParser.parseThermo();
     if (vendor === "neb") return window.NebParser.parseNeb();
     if (vendor === "sigma") return window.SigmaParser.parseSigma();
+    if (vendor === "activemotif") return window.ActiveMotifParser.parseActiveMotif();
+    if (vendor === "abcam") return window.AbcamParser.parseAbcam();
+    if (vendor === "generic") return window.GenericParser.parseGeneric();
 
     return {
       vendor: "",
@@ -24,8 +29,8 @@
       unitPrice: "",
       currency: "",
       sourceUrl: location.href,
-      parserUsed: "none",
-      confidence: 0
+      parserUsed: "generic",
+      confidence: 0.1
     };
   }
 

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Quartzy Capture Prototype",
-  "version": "0.4.0",
+  "version": "0.5.1",
   "description": "Capture reagent details from vendor product pages.",
   "permissions": [
     "storage",
@@ -12,10 +12,14 @@
   ],
   "host_permissions": [
     "https://api.quartzy.com/*",
+    "https://*/*",
+    "http://*/*",
     "https://*.thermofisher.com/*",
     "https://*.neb.com/*",
     "https://*.sigmaaldrich.com/*",
-    "https://*.milliporesigma.com/*"
+    "https://*.milliporesigma.com/*",
+    "https://*.activemotif.com/*",
+    "https://*.abcam.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -32,13 +36,18 @@
         "https://*.thermofisher.com/*",
         "https://*.neb.com/*",
         "https://*.sigmaaldrich.com/*",
-        "https://*.milliporesigma.com/*"
+        "https://*.milliporesigma.com/*",
+        "https://*.activemotif.com/*",
+        "https://*.abcam.com/*"
       ],
       "js": [
         "parsers/base.js",
         "parsers/thermo.js",
         "parsers/neb.js",
         "parsers/sigma.js",
+        "parsers/activemotif.js",
+        "parsers/abcam.js",
+        "parsers/generic.js",
         "parsers/index.js",
         "content.js"
       ],
