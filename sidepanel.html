@@ -79,7 +79,11 @@
 
       <div class="field">
         <label>Access token</label>
-        <input id="quartzyAccessToken" type="password" autocomplete="off" />
+        <div class="token-row">
+          <input id="quartzyAccessToken" type="password" autocomplete="off" />
+          <button id="quartzyTokenLockBtn" type="button">Lock token</button>
+        </div>
+        <div id="quartzyTokenLockHint" class="hint"></div>
       </div>
 
       <div class="field checkbox">

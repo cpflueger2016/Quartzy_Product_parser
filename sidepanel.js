@@ -2,6 +2,8 @@ const QUARTZY_SETTINGS_KEY = "quartzySettings";
 const QUARTZY_TOKEN_SESSION_KEY = "quartzyAccessTokenSession";
 const QUARTZY_TOKEN_LOCAL_KEY = "quartzyAccessTokenLocal";
 const QUARTZY_SUBMISSION_STATE_KEY = "quartzySubmissionState";
+let quartzyStoredToken = "";
+let quartzyTokenLocked = false;
 
 async function getActiveTab() {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -24,7 +26,101 @@ function escapeHtml(str) {
 function setDebugMessage(message) {
   const debugEl = getField("debug");
   if (!debugEl) return;
-  debugEl.textContent = message || "";
+  debugEl.textContent = normalizeMessage(message);
+}
+
+function syncQuartzyTokenLockUi() {
+  const tokenInput = getField("quartzyAccessToken");
+  const lockBtn = getField("quartzyTokenLockBtn");
+  const hintEl = getField("quartzyTokenLockHint");
+  if (!tokenInput || !lockBtn || !hintEl) return;
+
+  const visibleToken = String(tokenInput.value || "").trim();
+  const hasStoredToken = !!quartzyStoredToken;
+  const hasVisibleToken = !!visibleToken;
+  const isLocked = quartzyTokenLocked && hasStoredToken;
+
+  tokenInput.disabled = isLocked;
+  lockBtn.disabled = !hasStoredToken && !hasVisibleToken;
+  lockBtn.textContent = isLocked ? "Unlock token" : "Lock token";
+
+  if (isLocked) {
+    hintEl.textContent = "Stored token is locked against accidental edits.";
+    return;
+  }
+
+  if (hasStoredToken) {
+    hintEl.textContent = "Token editing is unlocked. Saving a new token will lock it again.";
+    return;
+  }
+
+  if (hasVisibleToken) {
+    hintEl.textContent = "Paste a token and save it. The token will lock automatically after saving.";
+    return;
+  }
+
+  hintEl.textContent = "No token saved yet.";
+}
+
+function normalizeMessage(message, fallback = "") {
+  if (typeof message === "string") {
+    return message || fallback;
+  }
+
+  if (message == null) {
+    return fallback;
+  }
+
+  if (message instanceof Error) {
+    return message.message || fallback;
+  }
+
+  try {
+    const serialized = JSON.stringify(message);
+    return serialized && serialized !== "{}" ? serialized : fallback;
+  } catch (_) {
+    return String(message || fallback);
+  }
+}
+
+function isQuartzyAuthorizationError(message) {
+  const normalized = normalizeMessage(message).toLowerCase();
+  return normalized.includes("unauthorized")
+    || normalized.includes("not authorized")
+    || normalized.includes("could not be authorized")
+    || normalized.includes("401");
+}
+
+async function diagnoseQuartzyAuthorization(settings, originalMessage) {
+  if (!settings?.accessToken) {
+    return normalizeMessage(originalMessage, "Quartzy access token is required.");
+  }
+
+  const response = await chrome.runtime.sendMessage({
+    type: "QUARTZY_GET_CURRENT_USER",
+    accessToken: settings.accessToken
+  });
+
+  if (!response?.ok) {
+    return "Quartzy rejected this access token. Generate a new token in Quartzy Profile Settings and update it here.";
+  }
+
+  const email = response.user?.email ? ` for ${response.user.email}` : "";
+  const orgHint = settings.organizationId ? " Verify the Organization ID is correct." : "";
+  return `Quartzy accepted the access token${email}, but this request is not authorized.${orgHint} Check that this user still has access to the selected lab and can create requests there.`;
+}
+
+async function resolveQuartzyErrorMessage(settings, originalMessage, fallbackMessage) {
+  const normalized = normalizeMessage(originalMessage, fallbackMessage);
+  if (!isQuartzyAuthorizationError(normalized)) {
+    return normalized;
+  }
+
+  try {
+    return await diagnoseQuartzyAuthorization(settings, normalized);
+  } catch (_) {
+    return normalized;
+  }
 }
 
 function setQuartzyStatus(message, kind = "", linkUrl = "") {
@@ -34,10 +130,11 @@ function setQuartzyStatus(message, kind = "", linkUrl = "") {
   statusEl.className = kind ? `status ${kind}` : "status";
   statusEl.innerHTML = "";
 
-  if (!message) return;
+  const normalizedMessage = normalizeMessage(message);
+  if (!normalizedMessage) return;
 
   const text = document.createElement("span");
-  text.textContent = message;
+  text.textContent = normalizedMessage;
   statusEl.appendChild(text);
 
   if (linkUrl) {
@@ -56,8 +153,9 @@ function setCaptureStatus(message, kind = "") {
   if (!statusEl) return;
 
   statusEl.className = kind ? `status ${kind}` : "status";
-  statusEl.textContent = message || "";
-  statusEl.classList.toggle("hidden", !message);
+  const normalizedMessage = normalizeMessage(message);
+  statusEl.textContent = normalizedMessage;
+  statusEl.classList.toggle("hidden", !normalizedMessage);
 }
 
 function setReceipt(submission) {
@@ -392,9 +490,14 @@ function buildQuartzyPayload(capture, settings) {
   return payload;
 }
 
-async function saveQuartzySettings() {
+async function saveQuartzySettings(options = {}) {
+  const { forceLock = false } = options;
   const rememberToken = !!getValue("quartzyRememberToken");
-  const accessToken = getValue("quartzyAccessToken");
+  const tokenInputValue = getValue("quartzyAccessToken");
+  const accessToken = quartzyTokenLocked && quartzyStoredToken
+    ? quartzyStoredToken
+    : tokenInputValue;
+  const tokenChanged = accessToken !== quartzyStoredToken;
   const settings = {
     rememberToken,
     organizationId: getValue("quartzyOrganizationId"),
@@ -407,17 +510,27 @@ async function saveQuartzySettings() {
 
   await chrome.storage.local.set({ [QUARTZY_SETTINGS_KEY]: settings });
 
-  if (rememberToken) {
-    await chrome.storage.local.set({ [QUARTZY_TOKEN_LOCAL_KEY]: accessToken });
-    await chrome.storage.session.remove(QUARTZY_TOKEN_SESSION_KEY);
+  if (accessToken) {
+    if (rememberToken) {
+      await chrome.storage.local.set({ [QUARTZY_TOKEN_LOCAL_KEY]: accessToken });
+      await chrome.storage.session.remove(QUARTZY_TOKEN_SESSION_KEY);
+    } else {
+      await chrome.storage.session.set({ [QUARTZY_TOKEN_SESSION_KEY]: accessToken });
+      await chrome.storage.local.remove(QUARTZY_TOKEN_LOCAL_KEY);
+    }
   } else {
-    await chrome.storage.session.set({ [QUARTZY_TOKEN_SESSION_KEY]: accessToken });
     await chrome.storage.local.remove(QUARTZY_TOKEN_LOCAL_KEY);
+    await chrome.storage.session.remove(QUARTZY_TOKEN_SESSION_KEY);
   }
+
+  quartzyStoredToken = accessToken;
+  quartzyTokenLocked = !!quartzyStoredToken && (forceLock || quartzyTokenLocked || tokenChanged);
+  setValue("quartzyAccessToken", quartzyStoredToken);
+  syncQuartzyTokenLockUi();
 
   return {
     ...settings,
-    accessToken
+    accessToken: quartzyStoredToken
   };
 }
 
@@ -442,6 +555,8 @@ async function loadQuartzySettings() {
     notes: savedSettings.notes || ""
   };
 
+  quartzyStoredToken = settings.accessToken;
+  quartzyTokenLocked = !!quartzyStoredToken;
   setValue("quartzyAccessToken", settings.accessToken);
   setValue("quartzyRememberToken", settings.rememberToken);
   setValue("quartzyOrganizationId", settings.organizationId);
@@ -450,6 +565,7 @@ async function loadQuartzySettings() {
   setValue("quartzyQuantity", settings.quantity);
   setValue("quartzyRequiredBefore", settings.requiredBefore);
   setValue("quartzyNotes", settings.notes);
+  syncQuartzyTokenLockUi();
 
   return settings;
 }
@@ -467,7 +583,10 @@ async function loadQuartzyLabs() {
   if (!response?.ok) {
     populateSelect("quartzyLab", [], "Unable to load labs");
     populateSelect("quartzyType", [], "Select a lab first");
-    setQuartzyStatus(response?.error || "Failed to load Quartzy labs.", "error");
+    setQuartzyStatus(
+      await resolveQuartzyErrorMessage(settings, response?.error, "Failed to load Quartzy labs."),
+      "error"
+    );
     return { settings, labs: [] };
   }
 
@@ -519,7 +638,10 @@ async function loadQuartzyTypes() {
 
   if (!response?.ok) {
     populateSelect("quartzyType", [], "Unable to load types");
-    setQuartzyStatus(response?.error || "Failed to load Quartzy request types.", "error");
+    setQuartzyStatus(
+      await resolveQuartzyErrorMessage(settings, response?.error, "Failed to load Quartzy request types."),
+      "error"
+    );
     return;
   }
 
@@ -577,7 +699,7 @@ async function refreshFromPage() {
   }
 
   setCaptureStatus("", "");
-  setDebugMessage(response?.error || "Unable to capture product details from this page.");
+  setDebugMessage(normalizeMessage(response?.error, "Unable to capture product details from this page."));
 }
 
 async function submitToQuartzy() {
@@ -595,7 +717,10 @@ async function submitToQuartzy() {
     });
 
     if (!response?.ok) {
-      setQuartzyStatus(response?.error || "Quartzy submission failed.", "error");
+      setQuartzyStatus(
+        await resolveQuartzyErrorMessage(settings, response?.error, "Quartzy submission failed."),
+        "error"
+      );
       return;
     }
 
@@ -613,7 +738,7 @@ async function submitToQuartzy() {
       response.result?.app_url || ""
     );
   } catch (error) {
-    setQuartzyStatus(error?.message || "Quartzy submission failed.", "error");
+    setQuartzyStatus(normalizeMessage(error, "Quartzy submission failed."), "error");
   }
 }
 
@@ -634,6 +759,16 @@ async function initializeQuartzyForm() {
 document.getElementById("refreshBtn").addEventListener("click", refreshFromPage);
 document.getElementById("submitBtn").addEventListener("click", submitToQuartzy);
 document.getElementById("loadQuartzyBtn").addEventListener("click", refreshQuartzyContext);
+document.getElementById("quartzyTokenLockBtn")?.addEventListener("click", async () => {
+  if (quartzyTokenLocked && quartzyStoredToken) {
+    quartzyTokenLocked = false;
+    syncQuartzyTokenLockUi();
+    getField("quartzyAccessToken")?.focus();
+    return;
+  }
+
+  await saveQuartzySettings({ forceLock: true });
+});
 
 document.getElementById("productOption")?.addEventListener("change", async (e) => {
   const idx = Number(e.target.value);
@@ -675,9 +810,15 @@ document.getElementById("quartzyType")?.addEventListener("change", async () => {
   });
 });
 
+document.getElementById("quartzyAccessToken")?.addEventListener("input", () => {
+  if (!quartzyTokenLocked) {
+    syncQuartzyTokenLockUi();
+  }
+});
+
 Promise.all([
   initializeQuartzyForm(),
   loadLatest()
 ]).catch(error => {
-  setQuartzyStatus(error?.message || "Failed to initialize Quartzy Capture.", "error");
+  setQuartzyStatus(normalizeMessage(error, "Failed to initialize Quartzy Capture."), "error");
 });

@@ -107,6 +107,63 @@ function buildQuartzyHeaders(accessToken) {
   };
 }
 
+function joinErrorMessages(messages) {
+  return [...new Set(
+    messages
+      .map(message => String(message || "").trim())
+      .filter(Boolean)
+  )].join("; ");
+}
+
+function extractQuartzyErrorMessage(payload) {
+  if (payload == null) return "";
+
+  if (typeof payload === "string") {
+    return payload.trim();
+  }
+
+  if (typeof payload === "number" || typeof payload === "boolean") {
+    return String(payload);
+  }
+
+  if (Array.isArray(payload)) {
+    return joinErrorMessages(payload.map(extractQuartzyErrorMessage));
+  }
+
+  if (typeof payload !== "object") {
+    return "";
+  }
+
+  const prioritizedKeys = [
+    "message",
+    "error",
+    "detail",
+    "details",
+    "title",
+    "reason",
+    "description",
+    "errors"
+  ];
+  const prioritized = joinErrorMessages(
+    prioritizedKeys.map(key => extractQuartzyErrorMessage(payload[key]))
+  );
+  if (prioritized) return prioritized;
+
+  const fieldLevel = joinErrorMessages(
+    Object.entries(payload).map(([key, value]) => {
+      const message = extractQuartzyErrorMessage(value);
+      return message ? `${key}: ${message}` : "";
+    })
+  );
+  if (fieldLevel) return fieldLevel;
+
+  try {
+    return JSON.stringify(payload);
+  } catch (_) {
+    return "";
+  }
+}
+
 async function quartzyApiRequest(path, options = {}) {
   const { accessToken, method = "GET", body, query } = options;
   const url = new URL(`${QUARTZY_API_BASE}${path}`);
@@ -131,15 +188,8 @@ async function quartzyApiRequest(path, options = {}) {
     : await response.text();
 
   if (!response.ok) {
-    let message = `Quartzy API request failed (${response.status}).`;
-
-    if (typeof payload === "string" && payload.trim()) {
-      message = payload.trim();
-    } else if (payload?.message) {
-      message = payload.message;
-    } else if (payload?.error) {
-      message = payload.error;
-    }
+    const extractedMessage = extractQuartzyErrorMessage(payload);
+    const message = extractedMessage || `Quartzy API request failed (${response.status}).`;
 
     throw new Error(message);
   }
@@ -164,6 +214,8 @@ function formatQuartzyType(type) {
 function ensureArrayPayload(payload) {
   if (Array.isArray(payload)) return payload;
   if (Array.isArray(payload?.data)) return payload.data;
+  if (Array.isArray(payload?.results)) return payload.results;
+  if (Array.isArray(payload?.items)) return payload.items;
   return [];
 }
 
@@ -268,6 +320,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({
         ok: false,
         error: error?.message || "Failed to load Quartzy lab."
+      });
+    });
+
+    return true;
+  }
+
+  if (message?.type === "QUARTZY_GET_CURRENT_USER") {
+    quartzyApiRequest("/user", {
+      accessToken: message.accessToken
+    }).then(user => {
+      sendResponse({
+        ok: true,
+        user: user?.data || user
+      });
+    }).catch(error => {
+      sendResponse({
+        ok: false,
+        error: error?.message || "Failed to load current Quartzy user."
       });
     });
 
